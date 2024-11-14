@@ -1,6 +1,4 @@
-<div align="center">
-    <img src="resources/PicoRV.png" alt="Logo" style="width: 100%;">
-</div>
+![Logo](resources/PicoRV.png)
 
 # PicoRV
 A compiler that supports a minimal set of RISC-V instructions.
