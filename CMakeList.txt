@@ -1,0 +1,41 @@
+cmake_minimum_required(VERSION 3.22)
+project(PicoRV)
+
+# Use C++20 and enable high optimization
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+
+# Fetch and include Google Test at configure time
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  GIT_REPOSITORY https://github.com/google/googletest.git
+  GIT_TAG release-1.10.0  # Use a stable release
+)
+FetchContent_MakeAvailable(googletest)
+
+# Compiler Source Files
+file(GLOB_RECURSE COMPILER_SOURCES
+    "${CMAKE_SOURCE_DIR}/src/compiler/lexer/*.cpp"
+    "${CMAKE_SOURCE_DIR}/src/compiler/lexer/*.h"
+)
+
+# Define the main compiler target
+add_executable(riscv_compiler ${COMPILER_SOURCES})
+
+# Test Source Files
+file(GLOB_RECURSE TEST_SOURCES
+    "${CMAKE_SOURCE_DIR}/src/tests/*.cpp"
+)
+
+# Define the test executable
+add_executable(riscv_compiler_tests ${TEST_SOURCES})
+
+# Link the test executable with Google Test and Compiler Sources
+target_link_libraries(riscv_compiler_tests PRIVATE gtest gtest_main)
+target_link_libraries(riscv_compiler_tests PRIVATE riscv_compiler)
+
+# Enable testing
+enable_testing()
+add_test(NAME riscv_compiler_tests COMMAND riscv_compiler_tests)
