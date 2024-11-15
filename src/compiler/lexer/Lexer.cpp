@@ -43,7 +43,7 @@ bool Lexer::isInstruction(const std::string& s) {
     return instructions.find(s) != instructions.end();
 }
 
-Token Lexer::getNextToken() {
+Token Lexer::nextToken() {
     skipNonAlphanumeric();
 
     if (!source.good() || source.eof()) {

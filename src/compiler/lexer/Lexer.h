@@ -32,7 +32,7 @@ public:
     Lexer(std::istream& source)
         : source(source), currentLine(1), currentColumn(1) {}
 
-    Token getNextToken();
+    Token nextToken();
 
 private:
     std::istream& source;
