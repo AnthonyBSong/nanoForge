@@ -1,8 +1,10 @@
 #include "include/Lexer.h"
 
-#include <string>
-#include <cstdint>
-#include <cstring>
+#include <string_view>
+#include <vector>
+#include <deque>
+#include <regex>
+#include <fstream>
 
 // Define TokenType and Token as per your specifications
 enum class TokenType {
@@ -20,18 +22,6 @@ struct Token {
     int line;
     int column;
 };
-
-// Function to pack up to 4 characters into a 32-bit integer
-inline uint32_t pack4(const char* str) {
-    uint32_t code = 0;
-    // Process up to 4 characters
-    for (int i = 0; i < 4; ++i) {
-        uint8_t c = (uint8_t)str[i];
-        code |= (uint32_t)c << (8 * (3 - i));
-        if (c == '\0') break;  // Stop if end of string
-    }
-    return code;
-}
 
 // Precomputed instruction codes (packed 4-char codes)
 constexpr uint32_t instruction_codes[] = {
@@ -60,12 +50,22 @@ constexpr uint32_t instruction_codes[] = {
 
 constexpr int num_instructions = sizeof(instruction_codes) / sizeof(instruction_codes[0]);
 
+// Function to pack up to 4 characters into a 32-bit integer
+inline uint32_t pack4(const std::string_view& str_view) {
+    uint32_t code = 0;
+    // Process up to 4 characters
+    for (size_t i = 0; i < 4 && i < str_view.size(); ++i) {
+        uint8_t c = (uint8_t)str_view[i];
+        code |= (uint32_t)c << (8 * (3 - i));
+    }
+    return code;
+}
+
 // Function to check if the token is an instruction
 inline bool is_instruction(uint32_t code) {
     // Use bitwise operations to compare codes
     for (int i = 0; i < num_instructions; ++i) {
-        uint32_t diff = code ^ instruction_codes[i];
-        if (diff == 0) {
+        if (code == instruction_codes[i]) {
             return true;
         }
     }
@@ -73,44 +73,45 @@ inline bool is_instruction(uint32_t code) {
 }
 
 // Function to check if the token is a register
-inline bool is_register(const char* str) {
-    // Check if the string starts with 'x'
-    uint8_t first_char = (uint8_t)str[0];
-    if (first_char != 'x') return false;
+inline bool is_register(const char* str, size_t length) {
+    // Check if the string starts with 'x' and has at least one digit
+    if (length < 2 || str[0] != 'x') return false;
 
-    // Parse the number after 'x' without branching
     uint32_t reg_num = 0;
-    const char* p = str + 1;
-    while (true) {
-        uint8_t c = (uint8_t)*p++;
+    for (size_t i = 1; i < length; ++i) {
+        uint8_t c = (uint8_t)str[i];
         uint8_t digit = c - '0';
-        if (digit > 9) break;
+        if (digit > 9) return false;
         reg_num = reg_num * 10 + digit;
     }
-    // Check if reg_num is between 0 and 31 and the string ends properly
-    return reg_num <= 31 && *--p == '\0';
+    return reg_num <= 31;
 }
 
 // Function to check if the token is an immediate value
-inline bool is_immediate(const char* str) {
-    uint8_t first_char = (uint8_t)str[0];
-    uint8_t second_char = (uint8_t)str[1];
+inline bool is_immediate(const char* str, size_t length) {
+    if (length == 0) return false;
 
-    const char* p = str;
+    uint8_t first_char = (uint8_t)str[0];
+    uint8_t second_char = length >= 2 ? (uint8_t)str[1] : 0;
+
+    size_t i = 0;
+
     // Check for binary immediate (0b...)
     if (first_char == '0' && second_char == 'b') {
-        p += 2;
-        uint8_t c;
-        while ((c = (uint8_t)*p++) != '\0') {
+        if (length <= 2) return false;  // Must have digits after '0b'
+        i = 2;
+        while (i < length) {
+            uint8_t c = (uint8_t)str[i++];
             if (c != '0' && c != '1') return false;
         }
         return true;
     }
     // Check for hexadecimal immediate (0x...)
     else if (first_char == '0' && second_char == 'x') {
-        p += 2;
-        uint8_t c;
-        while ((c = (uint8_t)*p++) != '\0') {
+        if (length <= 2) return false;  // Must have digits after '0x'
+        i = 2;
+        while (i < length) {
+            uint8_t c = (uint8_t)str[i++];
             c |= 32;  // Convert to lowercase
             if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
         }
@@ -118,42 +119,42 @@ inline bool is_immediate(const char* str) {
     }
     // Check for decimal immediate
     else {
-        uint8_t c;
-        while ((c = (uint8_t)*p++) != '\0') {
+        while (i < length) {
+            uint8_t c = (uint8_t)str[i++];
             if (c < '0' || c > '9') return false;
         }
-        return p != str + 1;  // Ensure at least one digit was read
+        return i > 0;  // At least one digit
     }
 }
 
 // Function to check if the token is a label
-inline bool is_label(const char* str) {
-    size_t len = strlen(str);
-    if (len == 0 || str[len - 1] != ':') return false;
+inline bool is_label(const char* str, size_t length) {
+    if (length == 0 || str[length - 1] != ':') return false;
 
-    // Check for '_' in the label (spaces are represented by '_')
-    for (size_t i = 0; i < len - 1; ++i) {
+    // Labels shouldn't contain spaces represented by '_'
+    for (size_t i = 0; i < length - 1; ++i) {
         if (str[i] == '_') return false;
     }
     return true;
 }
 
 // Main tokenization function
-Token tokenize(const std::string& token_str, int line, int column) {
-    const char* str = token_str.c_str();
-    uint32_t code = pack4(str);
+Token tokenize(const std::string_view& token_str_view, int line, int column) {
+    const char* str = token_str_view.data();
+    size_t length = token_str_view.size();
 
-    // Use bitwise operations to minimize branching
+    uint32_t code = pack4(token_str_view);
+
     if (is_instruction(code)) {
-        return {TokenType::INSTRUCTION, token_str, line, column};
-    } else if (is_register(str)) {
-        return {TokenType::REGISTER, token_str, line, column};
-    } else if (is_immediate(str)) {
-        return {TokenType::IMMEDIATE, token_str, line, column};
-    } else if (is_label(str)) {
-        return {TokenType::LABEL, token_str, line, column};
+        return {TokenType::INSTRUCTION, std::string(token_str_view), line, column};
+    } else if (is_register(str, length)) {
+        return {TokenType::REGISTER, std::string(token_str_view), line, column};
+    } else if (is_immediate(str, length)) {
+        return {TokenType::IMMEDIATE, std::string(token_str_view), line, column};
+    } else if (is_label(str, length)) {
+        return {TokenType::LABEL, std::string(token_str_view), line, column};
     } else {
-        return {TokenType::ERROR, token_str, line, column};
+        return {TokenType::ERROR, std::string(token_str_view), line, column};
     }
 }
 
@@ -163,30 +164,34 @@ Lexer::Lexer(std::ifstream& source) : currentLine(0), currentColumn(0) {
 
     std::string line;
     std::regex re("[a-zA-Z0-9_]+");
-while (std::getline(source, line)) {
-        auto it = std::sregex_iterator(line.begin(), line.end(), re);
-        auto end = std::sregex_iterator();
+    while (std::getline(source, line)) {
+            auto it = std::sregex_iterator(line.begin(), line.end(), re);
+            auto end = std::sregex_iterator();
 
-        for (; it != end; ++it) {
-            const auto& match = *it;
+            for (; it != end; ++it) {
+                const auto& match = *it;
 
-            // Get the position and length of the token
-            int tokenPosition = match.position(0);
-            int tokenLength = match.length(0);
+                // Get the position and length of the token
+                int tokenPosition = match.position(0);
+                int tokenLength = match.length(0);
 
-            // Update currentColumn to the position of the token
-            currentColumn = tokenPosition + 1;  // Columns start at 1
+                // Update currentColumn to the position of the token
+                currentColumn = tokenPosition + 1;  // Columns start at 1
 
-            // Create a string_view to the token within the line
-            std::string tokenStr(line.data() + tokenPosition, tokenLength);
+                // Create a string_view to the token within the line
+                std::string tokenStr(line.data() + tokenPosition, tokenLength);
 
-            // Tokenize and push the token into parsedFile
-            Token tok = tokenize(tokenStr, currentLine, currentColumn);
-            parsedFile.push_back(tok);
-        }
+                // Tokenize and push the token into parsedFile
+                Token tok = tokenize(tokenStr, currentLine, currentColumn);
+                parsedFile.push_back(tok);
+            }
 
-        // Move to the next line
-        currentLine++;
-        currentColumn = 1;  // Reset column at the start of a new line
+            //push END_OF_LINE at end of the line
+            parsedFile.push_back(Token(TokenType::END_OF_LINE, "\n", currentLine, currentColumn + 1));
+
+
+            // Move to the next line
+            currentLine++;
+            currentColumn = 1;  // Reset column at the start of a new line
     }
 };

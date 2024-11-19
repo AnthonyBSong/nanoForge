@@ -14,4 +14,7 @@ struct Token {
     std::string lexeme;
     int line;
     int column;
+
+    Token(TokenType t, const std::string& lex, int ln, int col)
+        : type(t), lexeme(lex), line(ln), column(col) {}
 };
