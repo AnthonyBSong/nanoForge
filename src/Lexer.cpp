@@ -159,7 +159,7 @@ Token tokenize(const std::string_view& token_str_view, int line, int column) {
 }
 
 // 0 indexing for line/column of the source .s or .asm file
-Lexer::Lexer(std::ifstream& source) : currentLine(0), currentColumn(0) {
+Lexer::Lexer(std::ifstream& source, std::deque<Token>& parsedFile) : currentLine(0), currentColumn(0), parsedFile(parsedFile) {
     if (!source.is_open()) throw std::runtime_error("Source file not found!");
 
     std::string line;
@@ -195,3 +195,11 @@ Lexer::Lexer(std::ifstream& source) : currentLine(0), currentColumn(0) {
             currentColumn = 1;  // Reset column at the start of a new line
     }
 };
+
+Token Lexer::nextToken() {
+    if (parsedFile.size() == 0) return; 
+
+    Token nToken = parsedFile.front();
+    parsedFile.pop_front();
+    return nToken;
+}

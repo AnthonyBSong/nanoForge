@@ -13,12 +13,11 @@
 
 class Lexer {
 public:
-    Lexer(std::ifstream& source);
-
+    Lexer(std::ifstream& source, std::deque<Token>& parsedFile);
     Token nextToken();
 
 private:
-    std::deque<Token> parsedFile;
+    std::deque<Token>& parsedFile;
     int currentLine;
     int currentColumn;
 
