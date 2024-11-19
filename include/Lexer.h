@@ -4,6 +4,7 @@
 #include <string>
 #include <fstream>
 #include <stdexcept>
+#include <regex>
 #include <unordered_set>
 #include <iostream>
 #include <queue>
