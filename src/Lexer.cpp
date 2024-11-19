@@ -7,50 +7,7 @@
 #include <unordered_set>
 #include <cctype>
 
-// Define TokenType enum
-enum class TokenType {
-    INSTRUCTION,
-    REGISTER,
-    IMMEDIATE,
-    LABEL,
-    END_OF_LINE,
-    ERROR
-};
-
-// Define Token struct
-struct Token {
-    TokenType type;
-    std::string lexeme;
-    int line;
-    int column;
-
-    // Constructor for convenience
-    Token(TokenType t, std::string lex, int ln, int col)
-        : type(t), lexeme(std::move(lex)), line(ln), column(col) {}
-};
-
-class Lexer {
-public:
-    // Constructor takes a reference to an empty deque and an unordered_set of instructions
-    Lexer(std::ifstream& source, std::deque<Token>& parsedFileRef, const std::unordered_set<std::string>& instructionsSet);
-
-    // Token consumption functions
-    bool hasMoreTokens() const;
-    const Token& peekNextToken() const;
-    Token getNextToken();
-
-    // For demonstration: Print all tokens
-    void printTokens() const;
-
-private:
-    int currentLine;
-    int currentColumn;
-    std::deque<Token>& parsedFile; // Reference to deque<Token>
-    const std::unordered_set<std::string>& instructions; // Reference to instruction set
-
-    // Tokenization function
-    Token tokenize(const char* str, size_t length, int line, int column);
-};
+#include "../include/Lexer.h"
 
 // Implementation of the Lexer constructor
 Lexer::Lexer(std::ifstream& source, std::deque<Token>& parsedFileRef, const std::unordered_set<std::string>& instructionsSet)
@@ -214,7 +171,7 @@ Token Lexer::getNextToken() {
     return nextToken;
 }
 
-// Implementation of printTokens for demonstration
+// Implementation of printTokens. May need to be changed later
 void Lexer::printTokens() const {
     for (const auto& tok : parsedFile) {
         std::string typeStr;

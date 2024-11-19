@@ -3,8 +3,8 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include "include/Token.h"
-#include "include/Lexer.h"
+#include "../include/Token.h"
+#include "../include/Lexer.h"
 
 int main() {
     // Define the set of instructions
