@@ -1,12 +1,13 @@
-#include "include/Lexer.h"
-
-#include <string_view>
-#include <vector>
 #include <deque>
-#include <regex>
 #include <fstream>
+#include <regex>
+#include <string>
+#include <stdexcept>
+#include <iostream>
+#include <unordered_set>
+#include <cctype>
 
-// Define TokenType and Token as per your specifications
+// Define TokenType enum
 enum class TokenType {
     INSTRUCTION,
     REGISTER,
@@ -16,190 +17,217 @@ enum class TokenType {
     ERROR
 };
 
+// Define Token struct
 struct Token {
     TokenType type;
     std::string lexeme;
     int line;
     int column;
+
+    // Constructor for convenience
+    Token(TokenType t, std::string lex, int ln, int col)
+        : type(t), lexeme(std::move(lex)), line(ln), column(col) {}
 };
 
-// Precomputed instruction codes (packed 4-char codes)
-constexpr uint32_t instruction_codes[] = {
-    0x6C756900, // "lui"
-    0x6A616C00, // "jal"
-    0x6A616C72, // "jalr"
-    0x62657100, // "beq"
-    0x626E6500, // "bne"
-    0x626C7400, // "blt"
-    0x62676500, // "bge"
-    0x626C7475, // "bltu"
-    0x62676575, // "bgeu"
-    0x6C770000, // "lw"
-    0x73770000, // "sw"
-    0x61646469, // "addi"
-    0x6F726900, // "ori"
-    0x616E6469, // "andi"
-    0x61646400, // "add"
-    0x73756200, // "sub"
-    0x736C6C00, // "sll"
-    0x73726C00, // "srl"
-    0x73726100, // "sra"
-    0x6F720000, // "or"
-    0x616E6400  // "and"
+class Lexer {
+public:
+    // Constructor takes a reference to an empty deque and an unordered_set of instructions
+    Lexer(std::ifstream& source, std::deque<Token>& parsedFileRef, const std::unordered_set<std::string>& instructionsSet);
+
+    // Token consumption functions
+    bool hasMoreTokens() const;
+    const Token& peekNextToken() const;
+    Token getNextToken();
+
+    // For demonstration: Print all tokens
+    void printTokens() const;
+
+private:
+    int currentLine;
+    int currentColumn;
+    std::deque<Token>& parsedFile; // Reference to deque<Token>
+    const std::unordered_set<std::string>& instructions; // Reference to instruction set
+
+    // Tokenization function
+    Token tokenize(const char* str, size_t length, int line, int column);
 };
 
-constexpr int num_instructions = sizeof(instruction_codes) / sizeof(instruction_codes[0]);
-
-// Function to pack up to 4 characters into a 32-bit integer
-inline uint32_t pack4(const std::string_view& str_view) {
-    uint32_t code = 0;
-    // Process up to 4 characters
-    for (size_t i = 0; i < 4 && i < str_view.size(); ++i) {
-        uint8_t c = (uint8_t)str_view[i];
-        code |= (uint32_t)c << (8 * (3 - i));
+// Implementation of the Lexer constructor
+Lexer::Lexer(std::ifstream& source, std::deque<Token>& parsedFileRef, const std::unordered_set<std::string>& instructionsSet)
+    : currentLine(1), currentColumn(1), parsedFile(parsedFileRef), instructions(instructionsSet)
+{
+    if (!source.is_open()) {
+        throw std::runtime_error("Source file not found!");
     }
-    return code;
-}
-
-// Function to check if the token is an instruction
-inline bool is_instruction(uint32_t code) {
-    // Use bitwise operations to compare codes
-    for (int i = 0; i < num_instructions; ++i) {
-        if (code == instruction_codes[i]) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Function to check if the token is a register
-inline bool is_register(const char* str, size_t length) {
-    // Check if the string starts with 'x' and has at least one digit
-    if (length < 2 || str[0] != 'x') return false;
-
-    uint32_t reg_num = 0;
-    for (size_t i = 1; i < length; ++i) {
-        uint8_t c = (uint8_t)str[i];
-        uint8_t digit = c - '0';
-        if (digit > 9) return false;
-        reg_num = reg_num * 10 + digit;
-    }
-    return reg_num <= 31;
-}
-
-// Function to check if the token is an immediate value
-inline bool is_immediate(const char* str, size_t length) {
-    if (length == 0) return false;
-
-    uint8_t first_char = (uint8_t)str[0];
-    uint8_t second_char = length >= 2 ? (uint8_t)str[1] : 0;
-
-    size_t i = 0;
-
-    // Check for binary immediate (0b...)
-    if (first_char == '0' && second_char == 'b') {
-        if (length <= 2) return false;  // Must have digits after '0b'
-        i = 2;
-        while (i < length) {
-            uint8_t c = (uint8_t)str[i++];
-            if (c != '0' && c != '1') return false;
-        }
-        return true;
-    }
-    // Check for hexadecimal immediate (0x...)
-    else if (first_char == '0' && second_char == 'x') {
-        if (length <= 2) return false;  // Must have digits after '0x'
-        i = 2;
-        while (i < length) {
-            uint8_t c = (uint8_t)str[i++];
-            c |= 32;  // Convert to lowercase
-            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
-        }
-        return true;
-    }
-    // Check for decimal immediate
-    else {
-        while (i < length) {
-            uint8_t c = (uint8_t)str[i++];
-            if (c < '0' || c > '9') return false;
-        }
-        return i > 0;  // At least one digit
-    }
-}
-
-// Function to check if the token is a label
-inline bool is_label(const char* str, size_t length) {
-    if (length == 0 || str[length - 1] != ':') return false;
-
-    // Labels shouldn't contain spaces represented by '_'
-    for (size_t i = 0; i < length - 1; ++i) {
-        if (str[i] == '_') return false;
-    }
-    return true;
-}
-
-// Main tokenization function
-Token tokenize(const std::string_view& token_str_view, int line, int column) {
-    const char* str = token_str_view.data();
-    size_t length = token_str_view.size();
-
-    uint32_t code = pack4(token_str_view);
-
-    if (is_instruction(code)) {
-        return {TokenType::INSTRUCTION, std::string(token_str_view), line, column};
-    } else if (is_register(str, length)) {
-        return {TokenType::REGISTER, std::string(token_str_view), line, column};
-    } else if (is_immediate(str, length)) {
-        return {TokenType::IMMEDIATE, std::string(token_str_view), line, column};
-    } else if (is_label(str, length)) {
-        return {TokenType::LABEL, std::string(token_str_view), line, column};
-    } else {
-        return {TokenType::ERROR, std::string(token_str_view), line, column};
-    }
-}
-
-// 0 indexing for line/column of the source .s or .asm file
-Lexer::Lexer(std::ifstream& source, std::deque<Token>& parsedFile) : currentLine(0), currentColumn(0), parsedFile(parsedFile) {
-    if (!source.is_open()) throw std::runtime_error("Source file not found!");
 
     std::string line;
-    std::regex re("[a-zA-Z0-9_]+");
+    std::regex re("[a-zA-Z0-9_]+", std::regex_constants::optimize); // Precompile regex with optimization
+
     while (std::getline(source, line)) {
-            auto it = std::sregex_iterator(line.begin(), line.end(), re);
-            auto end = std::sregex_iterator();
+        auto lineStart = line.data(); // Pointer to the start of the line
+        std::sregex_iterator it(line.begin(), line.end(), re);
+        std::sregex_iterator end;
 
-            for (; it != end; ++it) {
-                const auto& match = *it;
+        for (; it != end; ++it) {
+            const std::smatch& match = *it;
 
-                // Get the position and length of the token
-                int tokenPosition = match.position(0);
-                int tokenLength = match.length(0);
+            // Get the position and length of the token
+            int tokenPosition = match.position(0);
+            int tokenLength = match.length(0);
 
-                // Update currentColumn to the position of the token
-                currentColumn = tokenPosition + 1;  // Columns start at 1
+            // Update currentColumn to the position of the token
+            currentColumn = tokenPosition + 1; // Columns start at 1
 
-                // Create a string_view to the token within the line
-                std::string tokenStr(line.data() + tokenPosition, tokenLength);
+            // Get a pointer to the token within the line
+            const char* tokenStr = lineStart + tokenPosition;
 
-                // Tokenize and push the token into parsedFile
-                Token tok = tokenize(tokenStr, currentLine, currentColumn);
-                parsedFile.push_back(tok);
-            }
+            // Tokenize and push the token into parsedFile
+            Token tok = tokenize(tokenStr, tokenLength, currentLine, currentColumn);
+            parsedFile.push_back(std::move(tok));
+        }
 
-            //push END_OF_LINE at end of the line
-            parsedFile.push_back(Token(TokenType::END_OF_LINE, "\n", currentLine, currentColumn + 1));
+        // After processing all tokens in the line, add an END_OF_LINE token
+        parsedFile.emplace_back(TokenType::END_OF_LINE, "\n", currentLine, currentColumn);
 
-
-            // Move to the next line
-            currentLine++;
-            currentColumn = 1;  // Reset column at the start of a new line
+        // Move to the next line
+        currentLine++;
+        currentColumn = 1; // Reset column at the start of a new line
     }
-};
+}
 
-Token Lexer::nextToken() {
-    if (parsedFile.size() == 0) return; 
+// Implementation of the tokenize function
+Token Lexer::tokenize(const char* str, size_t length, int line, int column) {
+    TokenType type = TokenType::ERROR; // Default type
 
-    Token nToken = parsedFile.front();
+    // Avoid unnecessary copying by using string_view if available (C++17)
+#if __cplusplus >= 201703L
+    std::string_view tokenStr(str, length);
+#else
+    const char* tokenStr = str;
+    size_t tokenLength = length;
+#endif
+
+    // Use tokenStr directly without copying
+    // Check if the token is an instruction
+    std::string tokenLexeme(str, length);
+    if (instructions.find(tokenLexeme) != instructions.end()) {
+        type = TokenType::INSTRUCTION;
+    }
+    // Check if the token is a register
+    else if (length >= 2 && str[0] == 'x') {
+        // Check if the rest are digits and between 0 and 31
+        int reg_num = 0;
+        bool valid = true;
+        for (size_t i = 1; i < length; ++i) {
+            char c = str[i];
+            if (!std::isdigit(static_cast<unsigned char>(c))) {
+                valid = false;
+                break;
+            }
+            reg_num = reg_num * 10 + (c - '0');
+            if (reg_num > 31) { // Early exit if reg_num exceeds 31
+                valid = false;
+                break;
+            }
+        }
+        if (valid) {
+            type = TokenType::REGISTER;
+        }
+    }
+    // Check if the token is an immediate value
+    else if (length > 0) {
+        const char* s = str;
+        // Check for binary immediate (0b...)
+        if (length > 2 && s[0] == '0' && s[1] == 'b') {
+            bool valid = true;
+            for (size_t i = 2; i < length; ++i) {
+                char c = s[i];
+                if (c != '0' && c != '1') {
+                    valid = false;
+                    break;
+                }
+            }
+            if (valid) type = TokenType::IMMEDIATE;
+        }
+        // Check for hexadecimal immediate (0x...)
+        else if (length > 2 && s[0] == '0' && s[1] == 'x') {
+            bool valid = true;
+            for (size_t i = 2; i < length; ++i) {
+                char c = s[i];
+                if (!std::isxdigit(static_cast<unsigned char>(c))) {
+                    valid = false;
+                    break;
+                }
+            }
+            if (valid) type = TokenType::IMMEDIATE;
+        }
+        // Check for decimal immediate
+        else {
+            bool valid = true;
+            for (size_t i = 0; i < length; ++i) {
+                char c = s[i];
+                if (!std::isdigit(static_cast<unsigned char>(c))) {
+                    valid = false;
+                    break;
+                }
+            }
+            if (valid) type = TokenType::IMMEDIATE;
+        }
+    }
+    // Check if the token is a label
+    if (type == TokenType::ERROR && length > 0 && str[length - 1] == ':') {
+        // Labels shouldn't contain underscores (as per your specification)
+        bool hasUnderscore = false;
+        for (size_t i = 0; i < length - 1; ++i) {
+            if (str[i] == '_') {
+                hasUnderscore = true;
+                break;
+            }
+        }
+        if (!hasUnderscore) {
+            type = TokenType::LABEL;
+        }
+    }
+
+    return Token(type, std::move(tokenLexeme), line, column);
+}
+
+// Implementation of token consumption functions
+
+bool Lexer::hasMoreTokens() const {
+    return !parsedFile.empty();
+}
+
+const Token& Lexer::peekNextToken() const {
+    if (parsedFile.empty()) {
+        throw std::out_of_range("No tokens available to peek.");
+    }
+    return parsedFile.front();
+}
+
+Token Lexer::getNextToken() {
+    if (parsedFile.empty()) {
+        throw std::out_of_range("No tokens available.");
+    }
+    Token nextToken = std::move(parsedFile.front());
     parsedFile.pop_front();
-    return nToken;
+    return nextToken;
+}
+
+// Implementation of printTokens for demonstration
+void Lexer::printTokens() const {
+    for (const auto& tok : parsedFile) {
+        std::string typeStr;
+        switch (tok.type) {
+            case TokenType::INSTRUCTION: typeStr = "INSTRUCTION"; break;
+            case TokenType::REGISTER:    typeStr = "REGISTER";    break;
+            case TokenType::IMMEDIATE:   typeStr = "IMMEDIATE";   break;
+            case TokenType::LABEL:       typeStr = "LABEL";       break;
+            case TokenType::END_OF_LINE: typeStr = "END_OF_LINE"; break;
+            case TokenType::ERROR:       typeStr = "ERROR";       break;
+            default:                     typeStr = "UNKNOWN";     break;
+        }
+        std::cout << "Token: \"" << tok.lexeme << "\", Type: " << typeStr
+                  << ", Line: " << tok.line << ", Column: " << tok.column << "\n";
+    }
 }
