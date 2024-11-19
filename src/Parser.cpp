@@ -1,6 +1,6 @@
-#include "../include/Instruction.h"
-#include "../include/Token.h"
-#include "Parser.h"
+#include "include/Instruction.h"
+#include "include/Token.h"
+#include "include/Parser.h"
 
 Instruction parseInstruction(const std::vector<Token>& tokens, int& current) {
     Instruction inst;

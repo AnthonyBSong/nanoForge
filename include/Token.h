@@ -1,3 +1,5 @@
+#include <string>
+
 enum class TokenType {
     INSTRUCTION,
     REGISTER,
