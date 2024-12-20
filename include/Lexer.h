@@ -5,27 +5,7 @@
 #include <fstream>
 #include <string>
 #include <unordered_set>
-
-// Define TokenType enum
-enum class TokenType {
-    INSTRUCTION,
-    REGISTER,
-    IMMEDIATE,
-    LABEL,
-    END_OF_LINE,
-    ERROR
-};
-
-// Define Token struct
-struct Token {
-    TokenType type;
-    std::string lexeme;
-    int line;
-    int column;
-
-    // Constructor
-    Token(TokenType t, std::string lex, int ln, int col);
-};
+#include "Token.h"
 
 // Lexer class declaration
 class Lexer {
