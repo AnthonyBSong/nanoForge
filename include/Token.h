@@ -6,7 +6,10 @@ enum class TokenType {
     REGISTER,
     IMMEDIATE,
     LABEL,
-    END_OF_LINE,
+    PARENS,
+    PARENE,
+    EoL,
+    EoF,
     ERROR
 };
 
