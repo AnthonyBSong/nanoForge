@@ -1,4 +1,4 @@
-![Logo](resources/PicoRV.png)
+![Logo](resources/logo.png)
 
 # NanoForge
 A compiler that supports a minimal set of RISC instructions in:
