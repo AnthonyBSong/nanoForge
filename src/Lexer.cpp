@@ -10,6 +10,7 @@
 #include "../include/Lexer.h"
 
 // Implementation of the Lexer constructor
+// Implementation of the Lexer constructor
 Lexer::Lexer(std::ifstream& source, std::deque<Token>& parsedFileRef, const std::unordered_set<std::string>& instructionsSet)
     : currentLine(1), currentColumn(1), parsedFile(parsedFileRef), instructions(instructionsSet)
 {
@@ -18,7 +19,8 @@ Lexer::Lexer(std::ifstream& source, std::deque<Token>& parsedFileRef, const std:
     }
 
     std::string line;
-    std::regex re("[a-zA-Z0-9_]+", std::regex_constants::optimize); // Precompile regex with optimization
+    // Updated regex to also capture any trailing colon on labels:
+    std::regex re("([a-zA-Z0-9_]+:|[a-zA-Z0-9_]+|\\(|\\))", std::regex_constants::optimize);
 
     while (std::getline(source, line)) {
         auto lineStart = line.data(); // Pointer to the start of the line
@@ -44,12 +46,15 @@ Lexer::Lexer(std::ifstream& source, std::deque<Token>& parsedFileRef, const std:
         }
 
         // After processing all tokens in the line, add an END_OF_LINE token
-        parsedFile.emplace_back(TokenType::END_OF_LINE, "\n", currentLine, currentColumn);
+        parsedFile.emplace_back(TokenType::EoL, "\n", currentLine, currentColumn);
 
         // Move to the next line
         currentLine++;
         currentColumn = 1; // Reset column at the start of a new line
     }
+
+    // Add an End of File token at the end
+    parsedFile.emplace_back(TokenType::EoF, "EOF", currentLine, currentColumn);
 }
 
 // Implementation of the tokenize function
@@ -64,15 +69,21 @@ Token Lexer::tokenize(const char* str, size_t length, int line, int column) {
     size_t tokenLength = length;
 #endif
 
-    // Use tokenStr directly without copying
-    // Check if the token is an instruction
     std::string tokenLexeme(str, length);
-    if (instructions.find(tokenLexeme) != instructions.end()) {
+
+    // Detect parenthesis // <-- NEW CODE
+    if (tokenLexeme == "(") {
+        type = TokenType::PARENS;
+    }
+    else if (tokenLexeme == ")") {
+        type = TokenType::PARENE;
+    }
+    // Check if the token is an instruction
+    else if (instructions.find(tokenLexeme) != instructions.end()) {
         type = TokenType::INSTRUCTION;
     }
     // Check if the token is a register
     else if (length >= 2 && str[0] == 'x') {
-        // Check if the rest are digits and between 0 and 31
         int reg_num = 0;
         bool valid = true;
         for (size_t i = 1; i < length; ++i) {
@@ -118,6 +129,19 @@ Token Lexer::tokenize(const char* str, size_t length, int line, int column) {
             }
             if (valid) type = TokenType::IMMEDIATE;
         }
+        else if (type == TokenType::ERROR && length > 0 && str[length - 1] == ':') {
+            // Labels shouldn't contain underscores (as per your specification)
+            bool hasUnderscore = false;
+            for (size_t i = 0; i < length - 1; ++i) {
+                if (str[i] == '_') {
+                    hasUnderscore = true;
+                    break;
+                }
+            }
+            if (!hasUnderscore) {
+                type = TokenType::LABEL;
+            }
+        }
         // Check for decimal immediate
         else {
             bool valid = true;
@@ -131,7 +155,8 @@ Token Lexer::tokenize(const char* str, size_t length, int line, int column) {
             if (valid) type = TokenType::IMMEDIATE;
         }
     }
-    // Check if the token is a label
+
+    // Check if the token is a label (must appear after initial immediate check)
     if (type == TokenType::ERROR && length > 0 && str[length - 1] == ':') {
         // Labels shouldn't contain underscores (as per your specification)
         bool hasUnderscore = false;
@@ -180,7 +205,10 @@ void Lexer::printTokens() const {
             case TokenType::REGISTER:    typeStr = "REGISTER";    break;
             case TokenType::IMMEDIATE:   typeStr = "IMMEDIATE";   break;
             case TokenType::LABEL:       typeStr = "LABEL";       break;
-            case TokenType::END_OF_LINE: typeStr = "END_OF_LINE"; break;
+            case TokenType::PARENS:      typeStr = "PARENS";      break;
+            case TokenType::PARENE:      typeStr = "PARENE";      break;
+            case TokenType::EoL:         typeStr = "EoL";         break;
+            case TokenType::EoF:         typeStr = "EoF";         break;
             case TokenType::ERROR:       typeStr = "ERROR";       break;
             default:                     typeStr = "UNKNOWN";     break;
         }
