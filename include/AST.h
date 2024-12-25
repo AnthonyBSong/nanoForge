@@ -1,6 +1,4 @@
-#ifndef PARSER_H
-#define PARSE_H
-
+#pragma once
 #include <map>
 
 class parser {
@@ -10,6 +8,3 @@ private:
 
 
 };
-
-
-#endif

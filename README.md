@@ -1,6 +1,10 @@
 ![Logo](resources/PicoRV.png)
 
-# PicoRV
-A compiler that supports a minimal set of RISC-V instructions.
+# NanoForge
+A compiler that supports a minimal set of RISC instructions in:
+- MIPS
+- RISCV
+- ARM
+- SPARC
 
 
