@@ -5,7 +5,7 @@
 #include <fstream>
 #include <string>
 #include <unordered_set>
-#include "Token.h"
+#include "Token.hpp"
 
 // Lexer class declaration
 class Lexer {

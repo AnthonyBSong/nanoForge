@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <vector>
+#include <memory> // Needed for std::unique_ptr
 
 // Abstract class for a generic tree node
 template <typename T>
@@ -15,13 +16,13 @@ public:
     // Set the value of the node
     virtual void setValue(const T& value) = 0;
 
-    // Add a child node
-    virtual void addChild(AbstractTreeNode<T>* child) = 0;
+    // Add a child node using a unique_ptr
+    virtual void addChild(std::unique_ptr<AbstractTreeNode<T>> child) = 0;
 
-    // Get all child nodes
-    virtual const std::vector<AbstractTreeNode<T>*>& getChildren() const = 0;
+    // Get all child nodes (stored as unique_ptr)
+    virtual const std::vector<std::unique_ptr<AbstractTreeNode<T>>>& getChildren() const = 0;
 
-    // Remove a child node
+    // Remove a child node by raw pointer reference
     virtual bool removeChild(AbstractTreeNode<T>* child) = 0;
 };
 
@@ -37,7 +38,7 @@ public:
     // Set the root node of the tree
     virtual void setRoot(AbstractTreeNode<T>* root) = 0;
 
-    // Traverse the tree (example traversal type to be implemented)
+    // Traverse the tree
     virtual void traverse(std::ostream& os = std::cout) const = 0;
 
     // Clear the tree
