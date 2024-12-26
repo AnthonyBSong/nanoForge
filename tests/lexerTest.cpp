@@ -1,4 +1,4 @@
-#include "../compiler/lexer/Lexer.h"  // Adjust the path if needed
+#include "../include/Lexer.hpp"  // Adjust the path if needed
 #include <gtest/gtest.h>
 #include <sstream>
 #include <string>
@@ -45,7 +45,7 @@ TEST_F(LexerTest, RegisterTokenization) {
             
         } else {
             //Registers x32 to x50 are invalid, and should result in null
-            EXPECT_EQ(token.type, nullptr);
+            EXPECT_EQ(token.type, nullptr); // not necessarily nullptr
             EXPECT_EQ(token.lexeme, "x" + std::tostring(i));
         }
     }

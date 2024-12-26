@@ -2,15 +2,14 @@
 #include <string>
 
 enum class TokenType {
-    INSTRUCTION,
-    REGISTER,
-    IMMEDIATE,
-    LABEL,
-    PARENS,
-    PARENE,
-    EoL,
-    EoF,
-    ERROR
+    _INSTR,
+    _REG,
+    _IMM,
+    _LABEL,
+    _PUNC,
+    _EOL,
+    _EOF,
+    _ERROR
 };
 
 struct Token {
