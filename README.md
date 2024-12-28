@@ -5,8 +5,7 @@
 ![NanoForge Dark](resources/darklogo.png#gh-dark-mode-only)
 
 # NanoForge
-A compiler that supports a minimal set of RISC instructions in:
-- RISCV
+NanoForge has been tested with the following assembly languages:
 
 
 
