@@ -1,5 +1,4 @@
-#ifndef LEXER_H
-#define LEXER_H
+#pragma once
 
 #include <deque>
 #include <fstream>
@@ -7,11 +6,13 @@
 #include <unordered_set>
 #include "Token.hpp"
 
-// Lexer class declaration
 class Lexer {
 public:
-    // Constructor takes a reference to an empty deque and an unordered_set of instructions
-    Lexer(std::ifstream& source, std::deque<Token>& parsedFileRef, const std::unordered_set<std::string>& instructionsSet, const std::unordered_set<std::string>& punctuationSet);
+    // Constructor
+    Lexer(std::ifstream& source,
+          std::deque<Token>& parsedFileRef,
+          const std::unordered_set<std::string>& instructionsSet,
+          const std::unordered_set<std::string>& punctuationSet);
 
     // Token consumption functions
     bool hasMoreTokens() const;
@@ -24,12 +25,10 @@ public:
 private:
     int currentLine;
     int currentColumn;
-    std::deque<Token>& parsedFile;                           // Reference to deque<Token>
-    const std::unordered_set<std::string>& instructions;     // Reference to instruction set
+    std::deque<Token>& parsedFile;                           
+    const std::unordered_set<std::string>& instructions;     
     const std::unordered_set<std::string>& punctuations; 
 
     // Tokenization function
     Token tokenize(const char* str, size_t length, int line, int column);
 };
-
-#endif // LEXER_H

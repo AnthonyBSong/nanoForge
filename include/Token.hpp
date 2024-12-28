@@ -2,14 +2,14 @@
 #include <string>
 
 enum class TokenType {
-    _INSTR,
-    _REG,
-    _IMM,
-    _LABEL,
-    _PUNC,
-    _EOL,
-    _EOF,
-    _ERROR
+    INSTRUCTION,
+    REGISTER,
+    IMMEDIATE,
+    LABEL,
+    PUNCTUATION,
+    EoL,
+    EoF,
+    ERROR
 };
 
 struct Token {
@@ -18,6 +18,6 @@ struct Token {
     int line;
     int column;
 
-    Token(TokenType t, const std::string& lex, int ln, int col)
-        : type(t), lexeme(lex), line(ln), column(col) {}
+    Token(TokenType t, std::string l, int ln, int col)
+        : type(t), lexeme(std::move(l)), line(ln), column(col) {}
 };
