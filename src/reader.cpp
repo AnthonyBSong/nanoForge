@@ -6,6 +6,10 @@
 #include <unordered_map>
 #include <regex>
 
+// should probably create a paramType struct with first value being the type:
+// and the second being the value:. So like it could be type: punctuation
+// value: (.
+
 //---------------------------------
 // Data structure for bit fields
 //---------------------------------
