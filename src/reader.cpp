@@ -11,6 +11,14 @@
 // value: (.
 
 //---------------------------------
+// Data structure for parameters
+//---------------------------------
+struct Param {
+    std::string type;
+    std::string value;
+};
+
+//---------------------------------
 // Data structure for bit fields
 //---------------------------------
 struct BitField {
