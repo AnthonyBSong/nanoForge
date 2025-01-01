@@ -6,6 +6,6 @@
 
 # NanoForge
 NanoForge has been tested with the following assembly languages:
-
+-RISC-V
 
 
