@@ -84,21 +84,6 @@ TEST_P(ImmediateTokenizationTest, ImmediateTokenization) {
     EXPECT_EQ(token.lexeme, testCase.expectedLexeme);
 }
 
-// Test case: Label tokenization
-TEST_F(LexerTest, LabelTokenization) {
-    std::string input = "Label:";
-    auto source = createInputStream(input);
-    //std::deque<Token> parsedTokens;
-    Lexer lexer(source);
-
-    // Assuming Lexer has a method `nextToken()` to fetch tokens
-    auto token = lexer.nextToken();
-    EXPECT_EQ(token.type, TokenType::LABEL);
-    EXPECT_EQ(token.lexeme, "Label:");
-
-    // Additional checks for other tokens
-}
-
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

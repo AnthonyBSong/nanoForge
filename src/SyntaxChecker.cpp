@@ -6,7 +6,7 @@
 #include "AST.h"
 #include "TreeNode.hpp"
 #include "SyntaxTree.hpp"
-#include "reader.cpp" 
+#include "Reader.cpp" 
 
 // SyntaxChecker class
 class SyntaxChecker {

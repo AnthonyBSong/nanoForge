@@ -1,6 +1,10 @@
 #pragma once
 #include <string>
 
+struct Punctuation {
+    std::string type;
+};
+
 enum class TokenType {
     INSTRUCTION,
     REGISTER,
@@ -20,4 +24,14 @@ struct Token {
 
     Token(TokenType t, std::string l, int ln, int col)
         : type(t), lexeme(std::move(l)), line(ln), column(col) {}
+
+    // Corrected compareTokenType function
+    bool compareTokenType(const Token& other) const {
+        if (this->type == TokenType::PUNCTUATION 
+            || other.type == TokenType::PUNCTUATION) {
+                return (this->type == TokenType::PUNCTUATION && other.type == TokenType::PUNCTUATION)
+                    && (this->lexeme == other.lexeme);
+        }
+        else return this->type == TokenType::PUNCTUATION && other.type == TokenType::PUNCTUATION;
+    }
 };
