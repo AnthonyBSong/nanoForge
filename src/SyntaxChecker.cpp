@@ -6,7 +6,8 @@
 #include "AST.h"
 #include "TreeNode.hpp"
 #include "SyntaxTree.hpp"
-#include "Reader.cpp" 
+#include "Reader.cpp"
+#include "Token.hpp" // Include the Token header
 
 // SyntaxChecker class
 class SyntaxChecker {
@@ -26,9 +27,9 @@ public:
     }
 
     // Check if the tree is syntactically correct
-    bool checkSyntax(const AbstractTree<std::string>& tree) const {
+    bool checkSyntax(const AbstractTree<Token>& tree) const {
         // Check root
-        AbstractTreeNode<std::string>* root = tree.getRoot();
+        AbstractTreeNode<Token>* root = tree.getRoot();
         if (!root) {
             std::cerr << "Warning! The tree is empty (no root node).\n";
             return false;
@@ -38,18 +39,18 @@ public:
 
 private:
     // Function to validate nodes
-    bool checkNode(AbstractTreeNode<std::string>* node) const {
+    bool checkNode(AbstractTreeNode<Token>* node) const {
         // Base Case: If node is nullptr, return true
         if (!node) {
             return true;
         }
 
         // Get value of current node
-        std::string value = node->getValue();
+        Token value = node->getValue();
 
         // Check Node
         if (!isValidNode(value)) {
-            std::cerr << "Syntax Error: Invalid node value '" << value << "'.\n";
+            std::cerr << "Syntax Error: Invalid node value '" << value.lexeme << "'.\n";
             return false;
         }
 
@@ -69,15 +70,15 @@ private:
     }
 
     // Helper function to check Node validity
-    bool isValidNode(const std::string& value) const {
-        return paramMap.find(value) != paramMap.end();
+    bool isValidNode(const Token& value) const {
+        return paramMap.find(value.lexeme) != paramMap.end();
     }
 
     // Check number of children nodes
-    bool checkChildren(const std::string& value, const std::vector<std::unique_ptr<AbstractTreeNode<std::string>>>& children) const {
-        const auto& expectedParams = paramMap.at(value); // Get expected parameters
+    bool checkChildren(const Token& value, const std::vector<std::unique_ptr<AbstractTreeNode<Token>>>& children) const {
+        const auto& expectedParams = paramMap.at(value.lexeme); // Get expected parameters
         if (children.size() != expectedParams.size()) {
-            std::cerr << "Syntax Error: Node '" << value << "' expects "
+            std::cerr << "Syntax Error: Node '" << value.lexeme << "' expects "
                       << expectedParams.size() << " parameters, but has "
                       << children.size() << ".\n";
             return false;
@@ -102,14 +103,15 @@ int main() {
     SyntaxChecker check(paramMap);
 
     // Example: create a tree
-    SyntaxTree<std::string> tree;
+    SyntaxTree<Token> tree;
     
-    auto root = new TreeNode<std::string>("load");
-    auto child1 = new TreeNode<std::string>("register");
-    auto child2 = new TreeNode<std::string>("immediate");
+    //Sample checks
+    auto root = new TreeNode<Token>({TokenType::INSTRUCTION, "load", 1, 1});
+    auto child1 = new TreeNode<Token>({TokenType::REGISTER, "register", 1, 2});
+    auto child2 = new TreeNode<Token>({TokenType::IMMEDIATE, "immediate", 1, 3});
 
-    root->addChild(std::unique_ptr<AbstractTreeNode<std::string>>(child1));
-    root->addChild(std::unique_ptr<AbstractTreeNode<std::string>>(child2));
+    root->addChild(std::unique_ptr<AbstractTreeNode<Token>>(child1));
+    root->addChild(std::unique_ptr<AbstractTreeNode<Token>>(child2));
     tree.setRoot(root);
 
     // Create SyntaxChecker and check
