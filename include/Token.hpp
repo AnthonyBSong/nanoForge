@@ -29,8 +29,6 @@ struct Token {
         return this->type == other.type && this->lexeme == other.lexeme;
     }
 
-
-    // Corrected compareTokenType function
     bool compareTokenType(const Token& other) const {
         if (this->type == TokenType::PUNCTUATION 
             || other.type == TokenType::PUNCTUATION) {
