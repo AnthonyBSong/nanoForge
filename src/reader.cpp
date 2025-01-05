@@ -1,54 +1,93 @@
-#include <iostream>
-#include <fstream>
-#include <sstream>
+#pragma once
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <iostream>
+#include <fstream>
+#include <sstream>
 #include <regex>
+#include <../include/Token.hpp>
 
-// should probably create a paramType struct with first value being the type:
-// and the second being the value:. So like it could be type: punctuation
-// value: (.
-
-//---------------------------------
-// Data structure for parameters
-//---------------------------------
-struct Param {
-    std::string type;
-    std::string value;
-};
-
-//---------------------------------
-// Data structure for bit fields
-//---------------------------------
+//--------------------------------------------------------------
+// Data structure for bit fields (unchanged)
+//--------------------------------------------------------------
 struct BitField {
     int bitCount;      // e.g. 5
     std::string field; // e.g. "00101" or "register1"
 };
 
-//---------------------------------
-// parseParamLine:
-//   Parses something like:
+//--------------------------------------------------------------
+// Helper to convert something like "register : any" -> Token
+// Example inputs:
+//   "register : any"       => TokenType::REGISTER, lexeme="any"
+//   "punctuation : ,"      => TokenType::PUNCTUATION, lexeme=","
+//   "immediate : some_num" => TokenType::IMMEDIATE, lexeme="some_num"
+//   (etc.)
+//--------------------------------------------------------------
+Token parseParamStringToToken(const std::string& paramString)
+{
+    // Trim
+    auto start = paramString.find_first_not_of(" \t");
+    auto end   = paramString.find_last_not_of(" \t");
+    std::string trimmed = (start == std::string::npos)
+                        ? ""
+                        : paramString.substr(start, end - start + 1);
+
+    // Typically "register : any", so split on ':'
+    size_t colonPos = trimmed.find(':');
+    if (colonPos == std::string::npos) {
+        // If no colon found, treat the whole thing as an error or fallback
+        return Token(TokenType::ERROR, trimmed);
+    }
+
+    // Left of colon => something like "register", "punctuation", etc.
+    std::string typePart = trimmed.substr(0, colonPos);
+    // Right of colon => lexeme
+    std::string lexemePart = trimmed.substr(colonPos + 1);
+
+    // Trim both
+    {
+        auto s1 = typePart.find_first_not_of(" \t");
+        auto e1 = typePart.find_last_not_of(" \t");
+        if (s1 != std::string::npos && e1 != std::string::npos) {
+            typePart = typePart.substr(s1, e1 - s1 + 1);
+        }
+
+        auto s2 = lexemePart.find_first_not_of(" \t");
+        auto e2 = lexemePart.find_last_not_of(" \t");
+        if (s2 != std::string::npos && e2 != std::string::npos) {
+            lexemePart = lexemePart.substr(s2, e2 - s2 + 1);
+        }
+    }
+
+    // Now map the typePart to a TokenType
+    TokenType ttype = TokenType::ERROR;
+    if (typePart == "instruction")  ttype = TokenType::INSTRUCTION;
+    else if (typePart == "register")    ttype = TokenType::REGISTER;
+    else if (typePart == "immediate")   ttype = TokenType::IMMEDIATE;
+    else if (typePart == "label")       ttype = TokenType::LABEL;
+    else if (typePart == "punctuation") ttype = TokenType::PUNCTUATION;
+    // else, we keep it as ERROR or do something else
+
+    return Token(ttype, lexemePart);
+}
+
+//--------------------------------------------------------------
+// parseParamLine: produces instruction name plus a vector<Token>
+//   Example line:
 //     "load : register immediate [punctuation : (] register [punctuation : )]"
-//   Returns the instruction name, plus a list of parameter tokens.
 //
-//   We expect a format like:
-//     INSTR_NAME : param param param ...
-//   Where some params may be bracketed with "[punctuation : (]" etc.
-//
-//   Example paramMap entry:
-//     paramMap["load"] = {
-//       "register", "immediate", "punctuation : (", "register", "punctuation : )"
-//     };
-//---------------------------------
+//   But more typically your new input lines are like:
+//     "load : [register : any] [punctuation : ,] [immediate : some] ..."
+//--------------------------------------------------------------
 bool parseParamLine(
     const std::string &line, 
     std::string &outInstrName,
-    std::vector<std::string> &outParams)
+    std::vector<Token> &outTokens)
 {
     // Clear output containers
     outInstrName.clear();
-    outParams.clear();
+    outTokens.clear();
 
     // 1) Find colon to separate "INSTR_NAME" from the rest
     size_t colonPos = line.find(':');
@@ -58,7 +97,7 @@ bool parseParamLine(
 
     // 2) Extract instruction name
     outInstrName = line.substr(0, colonPos);
-    // Trim
+    // Trim instruction name
     {
         auto start = outInstrName.find_first_not_of(" \t");
         auto end   = outInstrName.find_last_not_of(" \t");
@@ -68,7 +107,7 @@ bool parseParamLine(
         outInstrName = outInstrName.substr(start, end - start + 1);
     }
 
-    // 3) The remainder is the parameter + bracket stuff
+    // 3) The remainder is the parameter portion
     std::string remainder = line.substr(colonPos + 1);
     // Trim
     {
@@ -79,98 +118,87 @@ bool parseParamLine(
         }
     }
 
-    // 4) We can parse out bracket tokens "[punctuation : (]" as a single token
-    //    and also parse whitespace-separated tokens in between.
-    //    We'll do a simple approach: use a regex to find bracket segments,
-    //    then replace them with a placeholder, then split.
-    //
-    //    Or we can do a two-step approach: 
-    //    - find bracketed segments with a regex
-    //    - everything outside is whitespace tokens.
-    //    For the bracket content, we keep it as is, e.g. "punctuation : (".
-    
-    // a) We'll gather bracket tokens in order
-    // b) We'll gather non-bracket tokens in between
-    // c) Combine them into outParams in the correct sequence
-
-    std::vector<std::pair<size_t, std::string>> bracketTokens; // (position, bracketContent)
-
-    // Regex to capture [ ... ]
+    // 4) We'll parse bracket tokens "[ ... ]" as single tokens; 
+    //    everything else is whitespace-separated, which might be plain words
+    //    or might be "foo : bar" style strings.
     std::regex bracketRegex(R"(\[([^]]*)\])"); 
     auto begin = std::sregex_iterator(remainder.begin(), remainder.end(), bracketRegex);
     auto endIt = std::sregex_iterator();
 
-    // We'll store the match positions and content
+    std::vector<std::pair<size_t, std::string>> bracketTokens; 
     for (std::sregex_iterator i = begin; i != endIt; ++i) {
         std::smatch match = *i;
-        // match.str() includes the brackets [ ... ], match[1] is inside
-        std::string fullBracket = match.str();   // e.g. "[punctuation : (]"
-        size_t bracketStart     = match.position(); // index in remainder
-        bracketTokens.push_back({ bracketStart, fullBracket });
+        bracketTokens.push_back({ match.position(), match.str() });
     }
 
-    // We'll parse from left to right, collecting whitespace tokens
-    // up until we hit a bracket. Then we'll push the bracket token as-is.
     size_t currentPos = 0;
-    for (size_t idx = 0; idx < bracketTokens.size(); ++idx) {
-        auto &bk = bracketTokens[idx];
+    for (auto &bk : bracketTokens) {
         size_t bracketStart = bk.first;
-        std::string bracketStr = bk.second; // e.g. "[punctuation : (]"
+        const std::string &fullBracketStr = bk.second; // e.g. "[register : any]"
 
-        // The substring from currentPos to bracketStart is non-bracket text
+        // The substring from currentPos to bracketStart = non-bracket text
         if (bracketStart > currentPos) {
             std::string nonBracket = remainder.substr(currentPos, bracketStart - currentPos);
-            // Split that by whitespace
+
+            // Split on whitespace, parse each chunk if it looks like a param
             std::stringstream ss(nonBracket);
-            std::string token;
-            while (ss >> token) {
-                outParams.push_back(token);
+            std::string tokenChunk;
+            while (ss >> tokenChunk) {
+                // If the chunk might have a colon, parse as param
+                // otherwise treat as error or something
+                // For example, if it's "register" with no colon, 
+                // you might interpret it as "register : ???"
+                // or just store a default token.
+                // For simplicity, let's do something minimal:
+                size_t cpos = tokenChunk.find(':');
+                if (cpos == std::string::npos) {
+                    // No colon => treat it as register or immediate? Up to you.
+                    // We'll just say error for now.
+                    outTokens.push_back(Token(TokenType::ERROR, tokenChunk));
+                } else {
+                    // parse as "xxxx : yyyy"
+                    outTokens.push_back(parseParamStringToToken(tokenChunk));
+                }
             }
         }
-        // Now push the bracket token literally, but we might want to strip off
-        // the outer brackets and keep the inside exactly. 
-        // e.g. if bracketStr = "[punctuation : (]", inside is "punctuation : ("
-        {
-            // Chop off the leading '[' and trailing ']'
-            // bracketStr.size() >= 2, presumably
-            std::string insideBrackets = bracketStr.substr(1, bracketStr.size() - 2); 
-            // e.g. "punctuation : ("
-            // We will store that as a single token
-            outParams.push_back(insideBrackets);
+
+        // Now parse the bracketed text: remove [ ]
+        if (fullBracketStr.size() >= 2) {
+            std::string inside = fullBracketStr.substr(1, fullBracketStr.size() - 2);
+            // e.g. "register : any"
+            Token t = parseParamStringToToken(inside);
+            outTokens.push_back(t);
         }
 
-        // Move currentPos to the end of the bracket
-        currentPos = bracketStart + bracketStr.size();
+        currentPos = bracketStart + fullBracketStr.size();
     }
 
-    // Finally, parse any trailing text after the last bracket
+    // 5) Parse any trailing text after the last bracket
     if (currentPos < remainder.size()) {
         std::string tail = remainder.substr(currentPos);
         std::stringstream ss(tail);
-        std::string token;
-        while (ss >> token) {
-            outParams.push_back(token);
+        std::string tokenChunk;
+        while (ss >> tokenChunk) {
+            size_t cpos = tokenChunk.find(':');
+            if (cpos == std::string::npos) {
+                outTokens.push_back(Token(TokenType::ERROR, tokenChunk));
+            } else {
+                outTokens.push_back(parseParamStringToToken(tokenChunk));
+            }
         }
     }
 
-    // Done parsing param line
     return true;
 }
 
-//---------------------------------
-// parseBinaryLine:
-//   Parses something like:
-//     "[5 : 00101] [3 : register1] [6 : immediateVal]"
-//   We store the results in a vector of BitField.
-//
-//   e.g. binaryMap["load"] -> { {5, "00101"}, {3, "register1"}, {6, "immediateVal"} }
-//---------------------------------
+//--------------------------------------------------------------
+// parseBinaryLine (unchanged, except you can keep it if needed)
+//--------------------------------------------------------------
 bool parseBinaryLine(const std::string &line, std::vector<BitField> &outBitFields)
 {
     outBitFields.clear();
 
-    // We'll look for bracketed segments: "[N : field]"
-    std::regex bracketRegex(R"(\[([^]]*)\])"); // captures text within [ ... ]
+    std::regex bracketRegex(R"(\[([^]]*)\])");
     auto begin = std::sregex_iterator(line.begin(), line.end(), bracketRegex);
     auto endIt = std::sregex_iterator();
 
@@ -178,10 +206,8 @@ bool parseBinaryLine(const std::string &line, std::vector<BitField> &outBitField
         std::smatch match = *i;
         std::string inside = match[1].str(); // e.g. "5 : 00101"
         
-        // We expect "<N> : <field>"
         size_t colonPos = inside.find(':');
         if (colonPos == std::string::npos) {
-            // Invalid format => skip or handle error
             continue;
         }
 
@@ -198,7 +224,6 @@ bool parseBinaryLine(const std::string &line, std::vector<BitField> &outBitField
         try {
             bitCount = std::stoi(numStr);
         } catch(...) {
-            // Handle error if needed
             continue;
         }
 
@@ -221,20 +246,16 @@ bool parseBinaryLine(const std::string &line, std::vector<BitField> &outBitField
     return true;
 }
 
-//---------------------------------
+//--------------------------------------------------------------
 // parseInstructionFile:
-//   Reads the file line-by-line in *pairs*:
-//     - First line: param line
-//     - Second line: binary line
-//   Populates paramMap and binaryMap accordingly.
-//
-//   If the file has an odd number of lines, the last line won't have a pair
-//   => handle that as you see fit (e.g., ignore or error).
-//---------------------------------
+//   Reads lines in pairs: 
+//     1) param line -> generates tokens
+//     2) binary line -> generates bit fields
+//--------------------------------------------------------------
 bool parseInstructionFile(
     const std::string &filename,
-    std::unordered_map<std::string, std::vector<std::string>> &paramMap,
-    std::unordered_map<std::string, std::vector<BitField>>     &binaryMap)
+    std::unordered_map<std::string, std::vector<Token>> &paramMap,
+    std::unordered_map<std::string, std::vector<BitField>> &binaryMap)
 {
     std::ifstream infile(filename);
     if (!infile.is_open()) {
@@ -244,8 +265,9 @@ bool parseInstructionFile(
 
     std::string line;
     int lineCount = 0;
+
     std::string instrName;
-    std::vector<std::string> params;
+    std::vector<Token> tokens;
     std::vector<BitField> bits;
 
     while (true) {
@@ -255,25 +277,21 @@ bool parseInstructionFile(
         }
         lineCount++;
 
-        // parse param line
-        bool okParam = parseParamLine(line, instrName, params);
+        bool okParam = parseParamLine(line, instrName, tokens);
         if (!okParam) {
             std::cerr << "Warning: parseParamLine() failed on line " << lineCount << "\n";
-            // Decide whether to continue or return false
             return false;
         }
 
         // 2) Read binary line
         if (!std::getline(infile, line)) {
-            // No second line => incomplete pair
             std::cerr << "Warning: instruction " << instrName 
                       << " has no binary-mapping line.\n";
-            // Decide if you want to break or treat as error
+            // Decide if you want to continue or break
             break;
         }
         lineCount++;
 
-        // parse binary line
         bool okBits = parseBinaryLine(line, bits);
         if (!okBits) {
             std::cerr << "Warning: parseBinaryLine() failed on line " << lineCount << "\n";
@@ -281,34 +299,40 @@ bool parseInstructionFile(
         }
 
         // 3) Store into maps
-        paramMap[instrName]  = params;
+        paramMap[instrName]  = tokens;
         binaryMap[instrName] = bits;
     }
 
     return true;
 }
 
+//--------------------------------------------------------------
+// Demo main
+//--------------------------------------------------------------
 int main() {
-    // Maps we want to fill
-    std::unordered_map<std::string, std::vector<std::string>> paramMap;
-    std::unordered_map<std::string, std::vector<BitField>>     binaryMap;
+    // Now paramMap is: instructionName -> vector<Token>
+    std::unordered_map<std::string, std::vector<Token>> paramMap;
+    std::unordered_map<std::string, std::vector<BitField>> binaryMap;
 
-    // Example usage
     if (!parseInstructionFile("instructions.txt", paramMap, binaryMap)) {
         std::cerr << "Failed to parse instructions file.\n";
         return 1;
     }
 
-    // Demo: print what we parsed
+    // Demonstration: print out paramMap
     std::cout << "=== Param Map ===\n";
     for (auto &kv : paramMap) {
-        std::cout << kv.first << " : ";
-        for (auto &p : kv.second) {
-            std::cout << "[" << p << "] ";
+        const auto &instr  = kv.first;
+        const auto &tokens = kv.second;
+        std::cout << instr << " : \n";
+        for (auto &tok : tokens) {
+            std::cout << "   TokenType=" << static_cast<int>(tok.type)
+                      << ", lexeme='" << tok.lexeme << "'\n";
         }
         std::cout << "\n";
     }
 
+    // Print out binaryMap
     std::cout << "\n=== Binary Map ===\n";
     for (auto &kv : binaryMap) {
         std::cout << kv.first << " : \n";
