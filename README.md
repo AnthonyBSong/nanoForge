@@ -5,7 +5,6 @@
 ![NanoForge Dark](resources/darklogo.png#gh-dark-mode-only)
 
 # NanoForge
-NanoForge has been tested with the following assembly languages:
--RISC-V
+
 
 
